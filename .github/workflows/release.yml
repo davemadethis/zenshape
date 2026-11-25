@@ -1,0 +1,61 @@
+# Builds every OS on a pushed vX.Y.Z tag and uploads into one draft GitHub
+# Release, which goes live (and reaches installed copies) when published by
+# hand. See docs/release.md.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  # Created once up front so the four builds don't race to create it.
+  draft:
+    # Releases live on the public repo, where installed copies look for them.
+    if: github.repository == 'davemadethis/zenshape'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check the tag matches package.json
+        run: |
+          version=$(node -p "require('./package.json').version")
+          [ "v$version" = "$GITHUB_REF_NAME" ] || { echo "tag $GITHUB_REF_NAME != package.json v$version"; exit 1; }
+      - name: Create the draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ! gh release list --json tagName --jq '.[].tagName' | grep -qx "$GITHUB_REF_NAME"; then
+            gh release create "$GITHUB_REF_NAME" --draft --verify-tag --title "Zenshape $GITHUB_REF_NAME" --generate-notes
+          fi
+
+  build:
+    needs: draft
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: macos-latest, arch: arm64 }
+          # No Intel macOS runner needed: Forge cross-builds x64 on Apple Silicon.
+          - { os: macos-latest, arch: x64 }
+          - { os: windows-latest, arch: x64 }
+          # WORKAROUND: 22.04 because newer rpm (4.20+) moved its build folder, and
+          # electron-installer-redhat's %install step can't find its files.
+          - { os: ubuntu-22.04, arch: x64 }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install rpm (for the .rpm maker)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y rpm
+      - run: npm ci
+      - run: npm test
+      - name: Build and upload to the draft release
+        run: npx electron-forge publish --arch=${{ matrix.arch }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

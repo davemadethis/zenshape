@@ -1,0 +1,9 @@
+node_modules/
+.vite/
+out/
+*.log
+.DS_Store
+*.tsbuildinfo
+test-results/
+# The UI suite's own Onshape pages (docs/ui-tests.md)
+ui-targets.local.json

@@ -1,0 +1,583 @@
+/* Colors sampled from Onshape's dark header so strip + header read as one bar. */
+:root {
+  --bar: #1c1c1c;
+  --tab: #2a2a2a;
+  --tab-hover: #323232;
+  --tab-active: #3a3a3a;
+  --text: #a8a8a8;
+  --text-active: #ffffff;
+  --accent: #3d8ee6;
+  /* The Z logo's blue: the accent, 10% lighter. Also in assets/icon.svg. */
+  --z-blue: #6aa8ec;
+  --strip-h: 36px;
+  --tab-h: 28px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  display: flex;
+  align-items: flex-start;
+  background: var(--bar);
+  color: var(--text);
+  font:
+    12px/1 -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    sans-serif;
+  user-select: none;
+  -webkit-app-region: drag;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  border: 0;
+  background: none;
+  padding: 0;
+  cursor: default;
+}
+
+/* Room for the traffic lights; macOS hides them in full screen. */
+#lights {
+  flex: 0 0 86px;
+}
+body.fullscreen #lights,
+body.overlay-controls #lights {
+  flex-basis: 8px;
+}
+/* Windows/Linux: the window's controls overlay the strip's right end. The
+   titlebar area is the strip minus them, so the rest is theirs. */
+body.overlay-controls {
+  padding-right: calc(
+    100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw)
+  );
+}
+
+#tabs {
+  display: flex;
+  gap: 2px;
+  flex: 0 1 auto;
+  min-width: 0;
+  height: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+#tabs::-webkit-scrollbar {
+  display: none;
+}
+
+/* Tabs hang from the top edge, like Onshape's document tabs flipped. */
+.tab {
+  -webkit-app-region: no-drag;
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 1 200px;
+  min-width: 72px;
+  height: var(--tab-h);
+  padding: 0 6px 0 10px;
+  background: var(--tab);
+  border-radius: 0 0 7px 7px;
+}
+.tab:hover {
+  background: var(--tab-hover);
+}
+.tab.active {
+  background: var(--tab-active);
+  color: var(--text-active);
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+.tab .title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.tab.loading .title {
+  animation: pulse 1.2s ease-in-out infinite;
+}
+@keyframes pulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+.tab .close {
+  flex: 0 0 16px;
+  height: 16px;
+  border-radius: 4px;
+  line-height: 16px;
+  text-align: center;
+  font-size: 13px;
+  visibility: hidden;
+}
+.tab:hover .close,
+.tab.active .close {
+  visibility: visible;
+}
+.tab .close:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.tab.pinned {
+  flex: 0 0 auto;
+  min-width: 0;
+  max-width: 140px;
+  padding: 0 10px;
+}
+
+.tab .rename {
+  flex: 1;
+  min-width: 60px;
+  height: 20px;
+  padding: 0 4px;
+  font: inherit;
+  color: var(--text-active);
+  background: #111;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  outline: none;
+  user-select: text;
+}
+
+/* Locked to its page. */
+.tab .lock {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  opacity: 0.75;
+}
+
+/* Two tabs sharing the screen: one grouped tab with two halves. */
+.group {
+  -webkit-app-region: no-drag;
+  display: flex;
+  align-items: center;
+  flex: 0 1 380px;
+  min-width: 150px;
+  height: var(--tab-h);
+  padding-left: 6px;
+  background: var(--tab);
+  border-radius: 0 0 7px 7px;
+}
+.group.shown {
+  box-shadow: inset 0 -2px 0 rgba(61, 142, 230, 0.45);
+}
+.group .tab.half {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 100%;
+  background: transparent;
+  border-radius: 0;
+}
+.group .tab.half:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+.group.shown .tab.half {
+  color: #cfcfcf;
+}
+.group .tab.half.active {
+  background: var(--tab-active);
+  color: var(--text-active);
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+.group-sep {
+  flex: 0 0 1px;
+  align-self: stretch;
+  margin: 6px 0;
+  background: #4a4a4a;
+}
+
+/* Arrangement icon, drawn in CSS: a box split by one line. */
+.split-icon {
+  -webkit-app-region: no-drag;
+  position: relative;
+  flex: 0 0 16px;
+  height: 12px;
+  margin-right: 4px;
+  border: 1.5px solid currentColor;
+  border-radius: 2.5px;
+  color: #9a9a9a;
+}
+.split-icon:hover {
+  color: var(--accent);
+}
+.split-icon::after {
+  content: '';
+  position: absolute;
+  background: currentColor;
+}
+.split-icon.row::after {
+  left: calc(50% - 0.75px);
+  top: 0;
+  bottom: 0;
+  width: 1.5px;
+}
+.split-icon.column::after {
+  top: calc(50% - 0.75px);
+  left: 0;
+  right: 0;
+  height: 1.5px;
+}
+
+/* Drag feedback: dropping here splits with this tab. */
+.tab.drop-onto {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.tab.dragging.over-page {
+  opacity: 0.4;
+}
+
+/* Dragging: the tab follows the pointer; a bar shows where it will land. */
+.tab.dragging {
+  z-index: 2;
+  opacity: 0.85;
+  transition: none;
+}
+#drop-marker {
+  position: fixed;
+  top: 3px;
+  width: 2px;
+  height: 22px;
+  background: var(--accent);
+  border-radius: 1px;
+  pointer-events: none;
+  z-index: 3;
+}
+
+/* Back / forward, between the traffic lights and the tabs. */
+.nav {
+  -webkit-app-region: no-drag;
+  flex: 0 0 24px;
+  height: var(--tab-h);
+  display: grid;
+  place-items: center;
+  color: var(--text);
+  border-radius: 0 0 6px 6px;
+}
+.nav:hover:not(:disabled) {
+  background: var(--tab-hover);
+  color: var(--text-active);
+}
+.nav:disabled {
+  opacity: 0.3;
+}
+#forward {
+  margin-right: 8px;
+}
+
+#new-tab {
+  -webkit-app-region: no-drag;
+  flex: 0 0 28px;
+  height: var(--tab-h);
+  margin-left: 2px;
+  font-size: 18px;
+  border-radius: 0 0 7px 7px;
+}
+#new-tab:hover {
+  background: var(--tab-hover);
+}
+
+/* A newer release to download (macOS/Linux; Windows updates itself). */
+#update {
+  -webkit-app-region: no-drag;
+  flex: 0 0 auto;
+  align-self: center;
+  height: 22px;
+  margin-right: 10px;
+  padding: 0 10px;
+  border-radius: 11px;
+  background: var(--accent);
+  color: var(--text-active);
+  font-size: 11px;
+}
+#update:hover {
+  background: var(--z-blue);
+}
+
+/* Zen toggle: the Z logo, white normally, fading to blue in zen mode. */
+#zen {
+  -webkit-app-region: no-drag;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: var(--strip-h);
+  margin-right: 14px;
+  color: #ffffff;
+  transition:
+    color 450ms ease,
+    transform 120ms ease;
+}
+#zen:hover {
+  transform: scale(1.08);
+}
+body.zen #zen {
+  color: var(--z-blue);
+}
+
+/* Always-present drag handle, however narrow the window gets. */
+#drag-gap {
+  flex: 1 0 48px;
+}
+
+/* Hidden tab bar: the view is just the gutter (painted below); the strip
+   waits above it and slides down while the gutter is hovered, then back up
+   after the pointer leaves. */
+/* The gutter itself, in the color of what's at the top of the page (zen's
+   gray, Onshape's top bar, a drawing's white toolbar), at the height main
+   lays the page out with: both come from state (--gutter-color/-h). Drawn as
+   the root's own background: with none, the body's background is painted on
+   the canvas underneath everything, and the strip would show the gutter over
+   its background when slid in. */
+html.collapsed {
+  background: linear-gradient(var(--gutter-color), var(--gutter-color)) top /
+    100% var(--gutter-h) no-repeat;
+}
+body.collapsed {
+  transform: translateY(-100%);
+  transition: transform 250ms ease;
+  -webkit-app-region: no-drag;
+}
+body.collapsed.peeked {
+  transform: none;
+  transition: transform 320ms ease;
+  -webkit-app-region: drag;
+}
+
+/* Split divider (this page loaded with #divider). */
+body.divider {
+  background: #2a2a2a;
+  -webkit-app-region: no-drag;
+}
+body.divider > * {
+  display: none !important;
+}
+body.divider.row {
+  cursor: col-resize;
+}
+body.divider.column {
+  cursor: row-resize;
+}
+body.divider:hover:not(.dragging) {
+  background: var(--accent);
+}
+/* While dragging, the view covers the pages; keep it see-through. */
+body.divider.dragging {
+  background: rgba(0, 0, 0, 0.01);
+}
+
+/* Drop preview over the pages (this page loaded with #overlay). */
+body.overlay {
+  background: transparent;
+  -webkit-app-region: no-drag;
+  pointer-events: none;
+}
+.drop-preview {
+  position: absolute;
+  box-sizing: border-box;
+  background: rgba(61, 142, 230, 0.18);
+  border: 2px solid var(--accent);
+  border-radius: 6px;
+  transition:
+    left 120ms ease,
+    top 120ms ease,
+    width 120ms ease,
+    height 120ms ease;
+}
+
+/* Logo and disclaimer over the whole window (this page loaded with #splash).
+   Fades out over 300ms (SPLASH_FADE_MS in tab-views.ts). */
+body.splash {
+  -webkit-app-region: no-drag;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bar);
+  color: var(--text);
+  opacity: 0;
+  transition: opacity 300ms ease;
+  cursor: default;
+  user-select: none;
+}
+body.splash.shown {
+  opacity: 1;
+  transition: none;
+}
+.splash-card {
+  max-width: 520px;
+  padding: 24px;
+  text-align: center;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.splash-logo {
+  color: var(--z-blue);
+}
+.splash-card h1 {
+  margin: 16px 0 0;
+  color: var(--text-active);
+  font-size: 26px;
+  font-weight: 600;
+}
+.splash-version {
+  font-size: 12px;
+  opacity: 0.7;
+}
+.splash-card h2 {
+  margin: 20px 0 8px;
+  color: var(--text-active);
+  font-size: 15px;
+  font-weight: 500;
+}
+.splash-points {
+  margin: 0;
+  padding: 0 0 0 18px;
+  text-align: left;
+}
+.splash-points li + li {
+  margin-top: 6px;
+}
+.splash-legal {
+  margin: 16px 0 0;
+  font-size: 11px;
+  opacity: 0.7;
+}
+.splash-hint {
+  margin: 20px 0 0;
+  font-size: 11px;
+  opacity: 0.5;
+}
+
+/* Saved Sign-in page (splash view in 'saved-sign-in' mode): the fields on
+   the left, what one click does on the right; one column when narrow. */
+.sign-in-form {
+  display: grid;
+  grid-template-columns: 300px 280px;
+  gap: 32px;
+  max-width: none;
+  text-align: left;
+  user-select: text;
+}
+.sign-in-form[hidden] {
+  display: none;
+}
+@media (max-width: 680px) {
+  .sign-in-form {
+    grid-template-columns: minmax(0, 340px);
+    gap: 20px;
+  }
+}
+.sign-in-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.sign-in-form h2 {
+  margin: 0;
+}
+.sign-in-form p {
+  margin: 0;
+  opacity: 0.8;
+}
+.sign-in-steps h3 {
+  margin: 0 0 12px;
+  color: var(--text-active);
+  font-size: 13px;
+  font-weight: 500;
+}
+.sign-in-steps ol {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.sign-in-steps li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.step-icon {
+  flex: none;
+  fill: none;
+  stroke: var(--z-blue);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.sign-in-form input {
+  padding: 7px 9px;
+  border: 1px solid #555;
+  border-radius: 5px;
+  background: #2a2a2a;
+  color: var(--text-active);
+  font: inherit;
+}
+.sign-in-form .sign-in-error {
+  min-height: 1.5em;
+  color: #ff8a80;
+  opacity: 1;
+}
+.sign-in-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.sign-in-buttons button {
+  padding: 5px 14px;
+  border: 1px solid #555;
+  border-radius: 5px;
+  background: #333;
+  color: var(--text-active);
+  font: inherit;
+}
+.sign-in-buttons button.primary {
+  border-color: var(--z-blue);
+  background: var(--z-blue);
+}
+
+/* A run: steps tick off as they happen; a stopped one says so. */
+.sign-in-steps li {
+  transition: opacity 150ms ease;
+}
+.sign-in-form.running .sign-in-steps li:not(.done):not(.stopped) {
+  opacity: 0.55;
+}
+.sign-in-steps li.done .step-icon {
+  stroke: #2e9e5b;
+}
+.sign-in-steps li.done span::after {
+  content: ' ✓';
+  color: #2e9e5b;
+}
+.sign-in-steps li.stopped .step-icon {
+  stroke: #ff8a80;
+}
+.sign-in-steps li.stopped span {
+  color: #ff8a80;
+}
+.sign-in-run-note {
+  margin: 12px 0 0;
+  min-height: 1.5em;
+  color: #ff8a80;
+}

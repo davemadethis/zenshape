@@ -1,0 +1,90 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
+  <defs>
+    <radialGradient id="glow" cx="0.78" cy="0.5" r="0.6">
+      <stop offset="0" stop-color="#3d8ee6" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#3d8ee6" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="hole" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3d8ee6"/>
+      <stop offset="0.6" stop-color="#1e5fa8"/>
+    </linearGradient>
+    <linearGradient id="view" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#dfe3e8"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="24" stdDeviation="28" flood-color="#000" flood-opacity="0.55"/>
+    </filter>
+    <clipPath id="win"><rect x="660" y="140" width="700" height="440" rx="16"/></clipPath>
+    <!-- Isometric block with a notch, reused in both panes -->
+    <g id="part">
+      <path d="M0 -70 L120 -1 L0 68 L-120 -1Z" fill="#a9ccf5"/>
+      <path d="M-120 -1 L0 68 L0 148 L-120 79Z" fill="#6aa8ec"/>
+      <path d="M0 68 L120 -1 L120 79 L0 148Z" fill="#3d8ee6"/>
+      <g fill="none" stroke="#1e5fa8" stroke-width="2" stroke-linejoin="round">
+        <path d="M0 -70 L120 -1 L0 68 L-120 -1Z M-120 -1 V79 L0 148 L120 79 V-1 M0 68 V148"/>
+      </g>
+    </g>
+  </defs>
+
+  <rect width="1280" height="720" fill="#1c1c1c"/>
+  <rect width="1280" height="720" fill="url(#glow)"/>
+
+  <!-- Left: mark, wordmark, tagline, features -->
+  <g transform="translate(96 196) scale(0.8)">
+    <path fill="#6aa8ec" fill-rule="evenodd" d="M0 0H100V100H0Z M0 30H57L0 62.91Z M100 70H43L100 37.09Z"/>
+  </g>
+  <text x="92" y="388" font-family="Inter Display, Inter, sans-serif" font-weight="700" font-size="104" letter-spacing="-3" fill="#ffffff">Zenshape</text>
+  <text x="96" y="440" font-family="Inter, sans-serif" font-weight="400" font-size="28" fill="#a8a8a8">Onshape in its own desktop app.</text>
+
+  <g font-family="Inter, sans-serif" font-weight="500" font-size="20" fill="#ffffff">
+    <rect x="96" y="482" width="88" height="40" rx="20" fill="#2a2a2a" stroke="#3a3a3a"/>
+    <text x="140" y="509" text-anchor="middle">Tabs</text>
+    <rect x="196" y="482" width="132" height="40" rx="20" fill="#2a2a2a" stroke="#3a3a3a"/>
+    <text x="262" y="509" text-anchor="middle">Split view</text>
+    <rect x="340" y="482" width="134" height="40" rx="20" fill="#2a2a2a" stroke="#6aa8ec"/>
+    <text x="407" y="509" text-anchor="middle" fill="#6aa8ec">Zen mode</text>
+  </g>
+
+  <!-- Right: app window, bleeding off the edge -->
+  <g filter="url(#shadow)">
+    <rect x="660" y="140" width="700" height="440" rx="16" fill="#1c1c1c" stroke="#3a3a3a" stroke-width="1.5"/>
+  </g>
+  <g clip-path="url(#win)">
+    <!-- tab strip -->
+    <rect x="660" y="140" width="700" height="44" fill="#1c1c1c"/>
+    <circle cx="684" cy="162" r="6.5" fill="#ff5f57"/>
+    <circle cx="706" cy="162" r="6.5" fill="#febc2e"/>
+    <circle cx="728" cy="162" r="6.5" fill="#28c840"/>
+    <g font-family="Inter, sans-serif" font-size="13">
+      <rect x="756" y="149" width="150" height="28" rx="6" fill="#3a3a3a"/>
+      <rect x="768" y="158" width="10" height="10" rx="2" fill="#6aa8ec"/>
+      <text x="786" y="167" fill="#ffffff">Bracket v3</text>
+      <rect x="910" y="149" width="150" height="28" rx="6" fill="#3a3a3a"/>
+      <rect x="922" y="158" width="10" height="10" rx="2" fill="#6aa8ec"/>
+      <text x="940" y="167" fill="#ffffff">Housing</text>
+      <rect x="1066" y="149" width="140" height="28" rx="6" fill="#2a2a2a"/>
+      <text x="1080" y="167" fill="#a8a8a8">Assembly</text>
+      <text x="1222" y="169" fill="#a8a8a8" font-size="20">+</text>
+      <rect x="1246" y="150" width="26" height="26" rx="6" fill="#6aa8ec"/>
+      <text x="1259" y="168" text-anchor="middle" fill="#1c1c1c" font-weight="700" font-size="14">Z</text>
+    </g>
+    <!-- split panes -->
+    <rect x="660" y="184" width="346" height="396" fill="url(#view)"/>
+    <rect x="1010" y="184" width="350" height="396" fill="url(#view)"/>
+    <rect x="1006" y="184" width="4" height="396" fill="#1c1c1c"/>
+    <use href="#part" transform="translate(833 322) scale(0.9)"/>
+    <g transform="translate(1145 330)">
+      <path d="M-95 0 V120 A95 52 0 0 0 95 120 V0Z" fill="#3d8ee6"/>
+      <path d="M-95 0 V120 A95 52 0 0 0 0 172 V52 A95 52 0 0 1 -95 0Z" fill="#6aa8ec"/>
+      <ellipse cx="0" cy="0" rx="95" ry="52" fill="#a9ccf5"/>
+      <ellipse cx="0" cy="0" rx="38" ry="21" fill="url(#hole)" stroke="#1e5fa8" stroke-width="2"/>
+      <path d="M-95 0 V120 A95 52 0 0 0 95 120 V0" fill="none" stroke="#1e5fa8" stroke-width="2"/>
+      <ellipse cx="0" cy="0" rx="95" ry="52" fill="none" stroke="#1e5fa8" stroke-width="2"/>
+    </g>
+    <!-- grid hint -->
+    <g stroke="#c5ccd4" stroke-width="1" opacity="0.6">
+      <path d="M700 545 H966 M1040 545 H1250"/>
+    </g>
+  </g>
+</svg>

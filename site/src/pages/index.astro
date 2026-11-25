@@ -1,0 +1,404 @@
+---
+// One page: what Zenshape is, what it does, where to get it, how to install it.
+// The disclaimer comes from the app's own copy, so the two can't drift apart.
+import iconUrl from '../../../assets/icon.svg?url';
+import { DISCLAIMER_LEGAL, DISCLAIMER_POINTS } from '../../../src/disclaimer';
+
+const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
+const repo = 'https://github.com/davemadethis/zenshape';
+const latest = `${repo}/releases/latest`;
+
+const downloads = [
+  { id: 'mac-arm64', label: 'macOS', note: 'Apple Silicon', file: '.dmg' },
+  { id: 'mac-x64', label: 'macOS', note: 'Intel', file: '.dmg' },
+  { id: 'win', label: 'Windows', note: '64-bit', file: '.exe' },
+  { id: 'deb', label: 'Linux', note: 'Debian, Ubuntu', file: '.deb' },
+  { id: 'rpm', label: 'Linux', note: 'Fedora', file: '.rpm' },
+];
+
+const features = [
+  {
+    title: 'Tabs',
+    text: 'Keep several Onshape documents and folders open in one window. Pin, rename and reorder them.',
+    demos: [{ src: 'demos/tab-rename+pin+lock.svg', alt: 'Renaming a tab, then pinning and locking it' }],
+  },
+  {
+    title: 'Split view',
+    text: 'Drag a tab onto another tab, or onto an edge of the page, to see two side by side or stacked.',
+    demos: [
+      { src: 'demos/tab-split-vertical.svg', alt: 'Moving a split tab to the bottom, stacking the two panes' },
+      { src: 'demos/tab-split-horizontal.svg', alt: 'Dragging a tab onto another to split the window side by side' },
+    ],
+  },
+  {
+    title: 'Zen mode',
+    text: 'Menus and panels slide out of the way, and come back when you move the mouse to the window’s edge.',
+    demos: [
+      { src: 'demos/zenmode-documents.svg', alt: 'Turning on zen mode: the tabs and toolbars step away and the model fills the window' },
+      { src: 'demos/zenmode-folders.svg', alt: 'Zen mode on the documents page: only the folders and the list stay' },
+    ],
+  },
+  {
+    title: 'The tab bar in zen mode',
+    text: 'Keep the tabs in view while zen mode clears the rest, or hide them too and give the model the whole window. Move the mouse to the top edge to bring hidden tabs back. View → Hide Tab Bar works outside zen mode too (⌃⌘B on macOS).',
+    demos: [{ src: 'demos/zenmode-hide-tab-bar.svg', alt: 'Keeping the tab bar visible in zen mode' }],
+  },
+  {
+    title: 'Pinned and locked tabs',
+    text: 'Pinned tabs come back when you reopen Zenshape. Lock a tab to a document or folder, and links that lead elsewhere open in a new tab.',
+    demos: [
+      { src: 'demos/tab-pin.svg', alt: 'Pinning a tab, then unpinning it' },
+      { src: 'demos/tab-lock.svg', alt: 'Locking a tab to its page, so documents open in new tabs' },
+    ],
+  },
+  {
+    title: 'Stays signed in',
+    text: 'Quit, reopen and update without logging back in. Save your login, and Zenshape fills it in when Onshape asks.',
+    demos: [{ src: 'demos/zenshape-signin.svg', alt: 'Signing in to Onshape with one click, then switching accounts' }],
+  },
+];
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Zenshape — a browser built for Onshape</title>
+    <meta
+      name="description"
+      content="Zenshape is a free desktop browser built for Onshape, with tabs, split view and a distraction-free zen mode. macOS, Windows and Linux."
+    />
+    <meta property="og:title" content="Zenshape" />
+    <meta property="og:description" content="A browser built for Onshape, with tabs, split view and zen mode." />
+    <meta property="og:image" content={new URL(`${base}zenshape-banner.jpg`, Astro.site)} />
+    <link rel="icon" type="image/svg+xml" href={iconUrl} />
+  </head>
+  <body>
+    <header class="hero">
+      <img
+        class="banner"
+        src={`${base}zenshape-banner.svg`}
+        width="1280"
+        height="720"
+        alt="Zenshape: tabs, split view and zen mode"
+      />
+      <div class="intro">
+        <h1>A browser built for Onshape.</h1>
+        <p>
+          Zenshape is a free desktop app that opens only <a href="https://www.onshape.com">Onshape</a>, with tabs, split
+          view and a distraction-free zen mode. For macOS, Windows and Linux.
+        </p>
+        <p><a class="button primary" href="#download">Download</a> <a class="button" href={repo}>Source on GitHub</a></p>
+      </div>
+    </header>
+
+    <main>
+      {
+        features.map((f) => (
+          <section class="feature">
+            <div class="copy">
+              <h2>{f.title}</h2>
+              <p>{f.text}</p>
+            </div>
+            <div class={`demos n${f.demos.length}`}>
+              {f.demos.map((g) => (
+                <img src={`${base}${g.src}`} alt={g.alt} loading="lazy" decoding="async" width="1280" height="720" />
+              ))}
+            </div>
+          </section>
+        ))
+      }
+
+      <section id="download" class="panel">
+        <h2>Download</h2>
+        <p class="muted" data-version>The latest release, from GitHub.</p>
+        <ul class="downloads">
+          {
+            downloads.map((d) => (
+              <li>
+                <a class="button" data-download={d.id} href={d.id === 'win' ? `${latest}/download/Zenshape-Setup.exe` : latest}>
+                  <strong>{d.label}</strong>
+                  <span>
+                    {d.note} · {d.file}
+                  </span>
+                </a>
+              </li>
+            ))
+          }
+        </ul>
+        <p class="muted">All files are on the <a href={latest}>latest release page</a>.</p>
+      </section>
+
+      <section class="panel">
+        <h2>Installing</h2>
+        <p>The builds aren’t code-signed yet, so your computer warns you the first time.</p>
+        <div class="steps">
+          <div>
+            <h3>macOS 12 or later</h3>
+            <ol>
+              <li>Open the <code>.dmg</code> and drag Zenshape to Applications.</li>
+              <li>Open it. macOS says it can’t verify the developer: click <strong>Done</strong>.</li>
+              <li>
+                In System Settings → Privacy &amp; Security, scroll to “Zenshape was blocked” and click <strong
+                  >Open Anyway</strong
+                >, then confirm.
+              </li>
+            </ol>
+            <p class="muted">
+              After an update, macOS may ask about “Zenshape Safe Storage” in your keychain. Click <strong
+                >Always Allow</strong
+              >, or you’ll be signed out.
+            </p>
+          </div>
+          <div>
+            <h3>Windows 10 or later</h3>
+            <ol>
+              <li>Run <code>Zenshape-Setup.exe</code>.</li>
+              <li>
+                If SmartScreen says “Windows protected your PC”, click <strong>More info</strong>, then <strong
+                  >Run anyway</strong
+                >.
+              </li>
+            </ol>
+            <p class="muted">It installs without admin rights and updates itself.</p>
+          </div>
+          <div>
+            <h3>Linux</h3>
+            <ul>
+              <li>Debian, Ubuntu: <code>sudo apt install ./zenshape_*_amd64.deb</code></li>
+              <li>Fedora: <code>sudo dnf install ./zenshape-*.x86_64.rpm</code></li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Signing in</h2>
+        <p>
+          Sign in to Onshape the first time you open Zenshape. Onshape ends sessions after some hours without use, so
+          expect its sign-in page about once a day, as in any browser. Two-factor authentication stays remembered.
+        </p>
+        <p>
+          Save your login in Zenshape and it’s typed in for you: press Return for your password, and Return again.
+          It’s encrypted with your system’s key store (the macOS keychain, Windows’ DPAPI or the Linux keyring).
+        </p>
+      </section>
+
+      <section class="panel about">
+        <h2>What Zenshape is and isn’t</h2>
+        <ul>
+          {DISCLAIMER_POINTS.map((p) => <li>{p}</li>)}
+        </ul>
+      </section>
+    </main>
+
+    <footer>
+      <p>{DISCLAIMER_LEGAL}</p>
+      <p>
+        Free for noncommercial use under the <a href={`${repo}/blob/main/LICENSE`}>PolyForm Noncommercial License 1.0.0</a
+        >. A project by <a href="https://github.com/davemadethis">Dave Seeman</a>. <a href={`${repo}/issues`}
+          >Report a problem</a
+        >.
+      </p>
+    </footer>
+
+    <script>
+      // Each OS's file has the version in its name, so the links come from the
+      // latest release's asset list; without it they stay on the release page.
+      const patterns: Record<string, RegExp> = {
+        'mac-arm64': /-arm64\.dmg$/,
+        'mac-x64': /-x64\.dmg$/,
+        win: /^Zenshape-Setup\.exe$/,
+        deb: /_amd64\.deb$/,
+        rpm: /\.x86_64\.rpm$/,
+      };
+      fetch('https://api.github.com/repos/davemadethis/zenshape/releases/latest')
+        .then((r) => (r.ok ? r.json() : null))
+        .then((release: { tag_name?: string; assets?: { name: string; browser_download_url: string }[] } | null) => {
+          if (!release?.assets) return;
+          for (const a of document.querySelectorAll<HTMLAnchorElement>('[data-download]')) {
+            const asset = release.assets.find((x) => patterns[a.dataset.download ?? '']?.test(x.name));
+            if (asset) a.href = asset.browser_download_url;
+          }
+          const v = document.querySelector('[data-version]');
+          if (v && release.tag_name) v.textContent = `Version ${release.tag_name.replace(/^v/, '')}, from GitHub.`;
+        })
+        .catch(() => {});
+    </script>
+  </body>
+</html>
+
+<style is:global>
+  :root {
+    color-scheme: dark;
+    --bg: #1b1c1e;
+    --panel: #232529;
+    --line: #34373d;
+    --text: #eceef1;
+    --muted: #a3a8b0;
+    --accent: #5aa0ea;
+    font-family:
+      Inter,
+      system-ui,
+      -apple-system,
+      'Segoe UI',
+      sans-serif;
+    line-height: 1.55;
+  }
+  * {
+    box-sizing: border-box;
+  }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+  }
+  a {
+    color: var(--accent);
+  }
+  img {
+    max-width: 100%;
+    height: auto;
+    display: block;
+  }
+  code {
+    font-size: 0.9em;
+    background: #2c2f34;
+    padding: 0.1em 0.35em;
+    border-radius: 4px;
+    word-break: break-all;
+  }
+  .hero {
+    max-width: 1120px;
+    margin: 0 auto;
+    padding: 24px 16px 8px;
+  }
+  .banner {
+    width: 100%;
+    border-radius: 14px;
+  }
+  .intro {
+    max-width: 720px;
+    margin: 32px auto 0;
+    text-align: center;
+  }
+  h1 {
+    font-size: clamp(1.8rem, 5vw, 2.8rem);
+    line-height: 1.15;
+    margin: 0 0 12px;
+  }
+  .intro p {
+    color: var(--muted);
+    font-size: 1.1rem;
+  }
+  .button {
+    display: inline-block;
+    padding: 10px 18px;
+    margin: 4px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    background: var(--panel);
+    color: var(--text);
+    text-decoration: none;
+  }
+  .button:hover {
+    border-color: var(--accent);
+  }
+  .button.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #0f1720;
+    font-weight: 600;
+  }
+  main {
+    max-width: 1120px;
+    margin: 0 auto;
+    padding: 24px 16px;
+  }
+  .feature {
+    display: grid;
+    grid-template-columns: 1fr 2fr;
+    gap: 32px;
+    align-items: center;
+    padding: 40px 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .feature h2 {
+    margin: 0 0 8px;
+  }
+  .feature p {
+    color: var(--muted);
+    margin: 0;
+  }
+  .demos {
+    display: grid;
+    gap: 16px;
+  }
+  .demos img {
+    border-radius: 10px;
+    border: 1px solid var(--line);
+  }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 24px;
+    margin: 40px 0;
+  }
+  .panel h2 {
+    margin-top: 0;
+  }
+  .muted {
+    color: var(--muted);
+  }
+  .downloads {
+    list-style: none;
+    padding: 0;
+    margin: 16px 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 12px;
+  }
+  .downloads .button {
+    display: block;
+    margin: 0;
+    border-radius: 12px;
+    text-align: left;
+    background: var(--bg);
+  }
+  .downloads span {
+    display: block;
+    color: var(--muted);
+    font-size: 0.9rem;
+  }
+  .steps {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 24px;
+  }
+  .steps h3 {
+    margin-bottom: 4px;
+  }
+  .steps ol,
+  .steps ul {
+    padding-left: 1.2em;
+  }
+  .about li {
+    margin-bottom: 8px;
+  }
+  footer {
+    max-width: 1120px;
+    margin: 0 auto;
+    padding: 8px 16px 48px;
+    color: var(--muted);
+    font-size: 0.9rem;
+  }
+  @media (max-width: 760px) {
+    .feature {
+      grid-template-columns: 1fr;
+      gap: 16px;
+      padding: 28px 0;
+    }
+  }
+</style>

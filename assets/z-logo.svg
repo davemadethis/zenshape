@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- The Z is the square minus two triangular cuts (from z-cut-square.svg),
+       drawn with evenodd so the cuts are see-through, not white. -->
+  <path fill="#6aa8ec" fill-rule="evenodd" d="M0 0H100V100H0Z M0 30H57L0 62.91Z M100 70H43L100 37.09Z"/>
+</svg>

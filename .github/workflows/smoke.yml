@@ -1,0 +1,127 @@
+# Builds the Windows and Linux installers, installs each on a fresh runner,
+# starts the installed app signed out, and checks it starts and lays out
+# (test/smoke): once as installed, once with the tab bar hidden. On demand only: a dispatch, or a push to a smoke/ branch to
+# try a commit before it merges. See docs/ui-tests.md (Smoke (CI)).
+name: Smoke
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ['smoke/**']
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: windows-latest, name: windows }
+          # The release's Linux runner (see release.yml).
+          - { os: ubuntu-22.04, name: linux }
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    env:
+      ZS_SMOKE_PORT: '9222'
+      ZS_SMOKE_OUT: ${{ github.workspace }}/smoke-out
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: mkdir -p smoke-out
+        shell: bash
+
+      # --- Linux ---------------------------------------------------------
+      # All of the OS's makers, as the release runs them: --targets would build
+      # a fresh maker without our options (the binary name, Setup.exe's name).
+      - name: Build the .deb (and the .rpm, untested)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update && sudo apt-get install -y rpm
+          npx electron-forge make --arch=x64
+      - name: Install the .deb, start a display
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get install -y xvfb openbox imagemagick x11-utils
+          sudo apt-get install -y ./out/make/deb/x64/*.deb
+          dpkg -L zenshape | grep -i bin/
+          Xvfb :99 -screen 0 1920x1080x24 &
+          sleep 2
+          DISPLAY=:99 openbox &
+          sleep 2
+          echo DISPLAY=:99 >> "$GITHUB_ENV"
+
+      # --- Windows -------------------------------------------------------
+      - name: Build Zenshape-Setup.exe
+        if: runner.os == 'Windows'
+        run: npx electron-forge make --arch=x64
+      - name: Install, and close what the installer launched
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem out/make -Recurse -Filter Zenshape-Setup.exe | Select-Object -First 1
+          # Not -Wait, which also waits on the app it launches.
+          $p = Start-Process $setup.FullName -ArgumentList '--silent' -PassThru
+          $p.WaitForExit()
+          Get-ChildItem "$env:LOCALAPPDATA\zenshape"
+          # Squirrel starts the app once after installing; give it time to appear.
+          Start-Sleep -Seconds 15
+          $launched = Get-Process Zenshape -ErrorAction SilentlyContinue
+          echo "stopping $(@($launched).Count) Zenshape process(es) the installer launched:"
+          $launched | Format-Table Id, Name, Path -AutoSize | Out-String -Width 300
+          $launched | Stop-Process -Force
+          $until = (Get-Date).AddSeconds(30)
+          while ((Get-Process Zenshape -ErrorAction SilentlyContinue) -and (Get-Date) -lt $until) { Start-Sleep -Seconds 1 }
+          if (Get-Process Zenshape -ErrorAction SilentlyContinue) { throw 'Zenshape is still running' }
+          # That first run made a profile; the test's launch must start on a
+          # fresh one (packaged builds always use %APPDATA%\Zenshape).
+          $userData = Join-Path $env:APPDATA 'Zenshape'
+          if (Test-Path $userData) {
+            echo "deleting the first run's profile: $userData"
+            Get-ChildItem $userData | Format-Table Name -AutoSize | Out-String
+            Remove-Item $userData -Recurse -Force
+          } else { echo "no profile at $userData" }
+          if (Test-Path $userData) { throw "couldn't delete $userData" }
+      # Each launch is one step: the runner ends a Windows step's processes
+      # when it finishes, so the app, the test and the screen grabs share it.
+      - name: Launch 1 (tab bar shown)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: pwsh -File test/smoke/launch-windows.ps1 -Out $env:ZS_SMOKE_OUT
+      # A fresh profile again, seeded with the tab bar hidden.
+      - name: Launch 2 (tab bar hidden)
+        if: always() && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $userData = Join-Path $env:APPDATA 'Zenshape'
+          Remove-Item $userData -Recurse -Force -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory $userData | Out-Null
+          '{"stripCollapsed":true}' | Set-Content -Encoding ascii (Join-Path $userData 'app-state.json')
+          pwsh -File test/smoke/launch-windows.ps1 -Out (Join-Path $env:ZS_SMOKE_OUT 'hidden') -Hidden
+
+      # --- Linux, continued ----------------------------------------------
+      - name: Launch 1 (tab bar shown)
+        if: runner.os == 'Linux'
+        run: bash test/smoke/launch-linux.sh "$ZS_SMOKE_OUT"
+      # Packaged builds keep their profile in ~/.config/Zenshape (productName).
+      - name: Launch 2 (tab bar hidden)
+        if: always() && runner.os == 'Linux'
+        run: |
+          ls -a ~/.config
+          rm -rf ~/.config/Zenshape
+          mkdir -p ~/.config/Zenshape
+          echo '{"stripCollapsed":true}' > ~/.config/Zenshape/app-state.json
+          bash test/smoke/launch-linux.sh "$ZS_SMOKE_OUT/hidden" hidden
+
+      # --- Both ----------------------------------------------------------
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: smoke-${{ matrix.name }}
+          path: smoke-out/
+          if-no-files-found: warn
