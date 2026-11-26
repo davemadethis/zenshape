@@ -1,3 +1,4 @@
+import path from 'node:path';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 
 // Boots src/main.ts against a fake Electron and records every view it creates.
@@ -203,6 +204,7 @@ const h = vi.hoisted(() => {
   }
 
   return {
+    userData: '/nonexistent',
     views,
     appListeners,
     windows,
@@ -231,7 +233,7 @@ vi.mock('electron', () => ({
     userAgentFallback: 'UA zenshape/0.1.0 Chrome/1 Electron/45.0.0',
     getName: () => 'Zenshape',
     name: 'Zenshape',
-    getPath: () => '/nonexistent',
+    getPath: () => h.userData,
     setAsDefaultProtocolClient: vi.fn(),
     on: (event: string, fn: (...args: unknown[]) => void) => {
       h.appListeners[event] = fn;
@@ -565,7 +567,8 @@ describe('saved sign-in', () => {
     // A login saved earlier (the fake's ciphertext), for the click fill.
     const enc = (s: string) => Buffer.from(`enc:${s}`).toString('base64');
     h.signIn.files.set(
-      '/nonexistent/saved-sign-in.json',
+      // As main.ts's userFile joins it: with \ on Windows.
+      path.join(h.userData, 'saved-sign-in.json'),
       JSON.stringify({ email: enc(EMAIL), password: enc(PASSWORD) }),
     );
   });

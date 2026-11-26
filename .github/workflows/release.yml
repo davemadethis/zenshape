@@ -54,6 +54,10 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y rpm
       - run: npm ci
+      # npm 11 blocks dependencies' install scripts, Electron's download among
+      # them. Done here, not on first use: npm test's parallel workers would
+      # race to unpack it.
+      - run: node node_modules/electron/install.js
       - run: npm test
       - name: Build and upload to the draft release
         run: npx electron-forge publish --arch=${{ matrix.arch }}

@@ -1,3 +1,4 @@
+import path from 'node:path';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 
 // Probes for the sign-in fill's races, against a fake
@@ -216,6 +217,7 @@ const h = vi.hoisted(() => {
   }
 
   return {
+    userData: '/nonexistent',
     views,
     appListeners,
     windows,
@@ -238,7 +240,7 @@ vi.mock('electron', () => ({
     userAgentFallback: 'UA zenshape/0.1.0 Chrome/1 Electron/45.0.0',
     getName: () => 'Zenshape',
     name: 'Zenshape',
-    getPath: () => '/nonexistent',
+    getPath: () => h.userData,
     setAsDefaultProtocolClient: vi.fn(),
     on: (event: string, fn: (...args: unknown[]) => void) => {
       h.appListeners[event] = fn;
@@ -407,7 +409,8 @@ describe('probes', () => {
   beforeAll(async () => {
     vi.useFakeTimers();
     h.signIn.files.set(
-      '/nonexistent/saved-sign-in.json',
+      // As main.ts's userFile joins it: with \ on Windows.
+      path.join(h.userData, 'saved-sign-in.json'),
       JSON.stringify({ email: enc(EMAIL), password: enc(PASSWORD) }),
     );
     await import('../src/main');
@@ -437,6 +440,8 @@ describe('probes', () => {
     const returns0 = page.returns;
     send(splash(), { type: 'sign-in', email: EMAIL, password: null });
     await adv(800);
+    // Without this, a login the app never found also passes "no Return".
+    expect(page.returns - returns0).toBe(1);
     // Stopped list for 2.5 s, then Onshape's page comes forward.
     await adv(3000);
     page.onReturn = undefined;
@@ -461,7 +466,10 @@ describe('probes', () => {
     await fresh();
     page.debugger.emailValue = '';
     page.debugger.focused = { attrs: EMAIL_FIELD, value: '' };
+    const typed0 = page.typed.length;
     await adv(260); // tick: types the saved email
+    // Without this, a login the app never found also passes "no password".
+    expect(page.typed[typed0]).toBe(EMAIL);
     page.debugger.emailValue = EMAIL;
     page.debugger.focused = { attrs: EMAIL_FIELD, value: EMAIL };
     await justAfterTick(); // tick: samples "matches"

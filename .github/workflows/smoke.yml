@@ -1,4 +1,4 @@
-# Builds the Windows and Linux installers, installs each on a fresh runner,
+# Runs the unit tests, then builds the Windows and Linux installers, installs each on a fresh runner,
 # starts the installed app signed out, and checks it starts and lays out
 # (test/smoke): once as installed, once with the tab bar hidden. On demand only: a dispatch, or a push to a smoke/ branch to
 # try a commit before it merges. See docs/ui-tests.md (Smoke (CI)).
@@ -33,6 +33,12 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      # npm 11 blocks dependencies' install scripts, Electron's download among
+      # them. Done here, not on first use: npm test's parallel workers would
+      # race to unpack it.
+      - run: node node_modules/electron/install.js
+      # Before a tag, this is the only place the unit tests run on Windows.
+      - run: npm test
       - run: mkdir -p smoke-out
         shell: bash
 
@@ -45,6 +51,7 @@ jobs:
           sudo apt-get update && sudo apt-get install -y rpm
           npx electron-forge make --arch=x64
       - name: Install the .deb, start a display
+        id: install-linux
         if: runner.os == 'Linux'
         run: |
           sudo apt-get install -y xvfb openbox imagemagick x11-utils
@@ -61,6 +68,7 @@ jobs:
         if: runner.os == 'Windows'
         run: npx electron-forge make --arch=x64
       - name: Install, and close what the installer launched
+        id: install-windows
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
@@ -93,9 +101,10 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: pwsh -File test/smoke/launch-windows.ps1 -Out $env:ZS_SMOKE_OUT
-      # A fresh profile again, seeded with the tab bar hidden.
+      # A fresh profile again, seeded with the tab bar hidden. It runs even
+      # when launch 1 failed, but only once the app is installed.
       - name: Launch 2 (tab bar hidden)
-        if: always() && runner.os == 'Windows'
+        if: always() && steps.install-windows.outcome == 'success'
         shell: pwsh
         run: |
           $userData = Join-Path $env:APPDATA 'Zenshape'
@@ -110,7 +119,7 @@ jobs:
         run: bash test/smoke/launch-linux.sh "$ZS_SMOKE_OUT"
       # Packaged builds keep their profile in ~/.config/Zenshape (productName).
       - name: Launch 2 (tab bar hidden)
-        if: always() && runner.os == 'Linux'
+        if: always() && steps.install-linux.outcome == 'success'
         run: |
           ls -a ~/.config
           rm -rf ~/.config/Zenshape
