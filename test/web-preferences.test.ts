@@ -787,7 +787,7 @@ describe('the Sign in button', () => {
     page = back;
   }, 10_000);
 
-  it('Onshape asks for a code: the step list shows where it stopped, then Onshape’s page comes forward', async () => {
+  it('Onshape asks for a code: handed over, every step done as a success, then Onshape’s page comes forward', async () => {
     // The sign-in tab from the sign-out above, on Zenshape's page again.
     item('Saved Sign-in…').click!();
     await settle();
@@ -809,11 +809,11 @@ describe('the Sign in button', () => {
     expect(splashState()).toMatchObject({
       splash: 'saved-sign-in',
       signInRun: {
-        done: ['save', 'email', 'password'],
-        stopped: { step: 'done' },
+        done: ['save', 'email', 'password', 'done'],
+        stopped: null,
       },
     });
-    await settle(2700);
+    await settle(800);
     expect(splashState().splash).toBeNull();
   }, 10_000);
 

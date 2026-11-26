@@ -26,6 +26,7 @@ const dropMarker = document.getElementById('drop-marker')!;
 const backBtn = document.getElementById('back') as HTMLButtonElement;
 const forwardBtn = document.getElementById('forward') as HTMLButtonElement;
 const updateBtn = document.getElementById('update') as HTMLButtonElement;
+const zenBtn = document.getElementById('zen') as HTMLButtonElement;
 
 // Tabs reorder within their group (pins, or the rest); the sign-in tab
 // doesn't move. While a tab is held, state pushes wait: pressing a tab selects
@@ -352,6 +353,11 @@ function render(state: StripState): void {
     state.controls === 'overlay',
   );
   document.body.classList.toggle('zen', state.zen);
+  // Off macOS there's no menu bar: the Z's right-click menu is the app menu.
+  zenBtn.title =
+    state.controls === 'overlay'
+      ? 'Zen Mode — right-click for menu'
+      : 'Zen Mode (⌃⌘Z)';
   backBtn.disabled = !state.canGoBack;
   forwardBtn.disabled = !state.canGoForward;
   updateBtn.hidden = !state.update;
@@ -724,7 +730,8 @@ if (location.hash === '#divider') {
     );
   });
   // Right-click on empty tab-bar space (or the Z): Hide Tab Bar, Zen Mode,
-  // Hide Tab Bar in Zen Mode. Tabs have their own menu.
+  // Hide Tab Bar in Zen Mode, and off macOS the app menu. Tabs have their
+  // own menu.
   document.addEventListener('contextmenu', (e) => {
     e.preventDefault();
     bridge.send({ type: 'strip-menu' });

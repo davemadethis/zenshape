@@ -54,7 +54,8 @@ jobs:
         id: install-linux
         if: runner.os == 'Linux'
         run: |
-          sudo apt-get install -y xvfb openbox imagemagick x11-utils
+          # xdotool: step h's Esc and Ctrl+T.
+          sudo apt-get install -y xvfb openbox imagemagick x11-utils xdotool
           sudo apt-get install -y ./out/make/deb/x64/*.deb
           dpkg -L zenshape | grep -i bin/
           Xvfb :99 -screen 0 1920x1080x24 &
@@ -122,7 +123,9 @@ jobs:
         if: always() && steps.install-linux.outcome == 'success'
         run: |
           ls -a ~/.config
-          rm -rf ~/.config/Zenshape
+          # A helper process exiting late can still be writing to it.
+          for i in 1 2 3 4 5; do rm -rf ~/.config/Zenshape && break; sleep 2; done
+          [ ! -e ~/.config/Zenshape ]
           mkdir -p ~/.config/Zenshape
           echo '{"stripCollapsed":true}' > ~/.config/Zenshape/app-state.json
           bash test/smoke/launch-linux.sh "$ZS_SMOKE_OUT/hidden" hidden

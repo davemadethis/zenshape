@@ -4,10 +4,10 @@
 
 **Why it exists** — Process-wide concerns live here; everything about one window and its tabs lives in `tab-views.ts`. Electron rather than Tauri: system webviews render inconsistently and WebKitGTK's WebGL is unreliable on Linux, and Onshape is a WebGL app (hardware acceleration stays on).
 
-**Talks to** — `tab-views.ts` (the window), `saved-sign-in.ts` (with `safeStorage`), `app-state.ts` + `window-state.ts` (disk), `tabs.ts` (`tabsToRestore`), `navigation.ts` (UA cleanup), `web-preferences.ts` (`PARTITION`). Built by the Forge Vite plugin into `.vite/build/main.cjs`.
+**Talks to** — `tab-views.ts` (the window), `app-menu.ts` (the menu's template), `saved-sign-in.ts` (with `safeStorage`), `app-state.ts` + `window-state.ts` (disk), `tabs.ts` (`tabsToRestore`), `navigation.ts` (UA cleanup), `web-preferences.ts` (`PARTITION`). Built by the Forge Vite plugin into `.vite/build/main.cjs`.
 
 **Gotchas**
-- The menu is rebuilt on every tab change so "Hide/Show Tab Bar" reads right. Accelerators: ⌘T/⌘W/⌘1–9/⌃Tab/⌃⌘B, plus ⌘R, ⌘[ ⌘], ⌥⌘I acting on the active tab.
+- The menu comes from `appMenuTemplate` (`app-menu.ts`), with a context `menuContext()` builds fresh each time; the same is handed to the window as `appMenu`, for the Z's menu off macOS. It's set on every OS: off macOS it shows nowhere, but registers the accelerators. It is rebuilt on every tab change so "Hide/Show Tab Bar" reads right. Accelerators: ⌘T/⌘W/⌘1–9/⌃Tab/⌃⌘B, plus ⌘R, ⌘[ ⌘], ⌥⌘I acting on the active tab; ⌃⌘Z and ⌃⌘B on macOS only.
 - `startUpdates` (`updates.ts`) runs once at launch; a newer release becomes an "Update Available (x.y.z)…" item under About and is handed to every window (`setUpdate`).
 - Dev runs with `ZENSHAPE_E2E=1` (the UI tests) also get Chromium switches that keep a covered window rendering, so measurements don't depend on what else is on screen.
 - About Zenshape opens the window's splash view (creating a window first if none is open) (logo, version, disclaimer), not the native About panel: Windows has none. The same view shows briefly at launch.

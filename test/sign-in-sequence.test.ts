@@ -13,6 +13,7 @@ function clock(): Timing {
   return {
     timeoutMs: 10_000,
     pollMs: 150,
+    settleMs: 2_000,
     now: () => now,
     sleep: (ms) => {
       now += ms;
@@ -138,16 +139,16 @@ describe('the Sign in sequence', () => {
     expect(p.typed).toEqual([EMAIL]);
   });
 
-  it('a timeout: no password typed when the password step doesn’t appear in time', async () => {
+  it('a timeout: no password typed when the password step doesn’t appear in time, and the email step not ticked', async () => {
     const p = fakePage({ focus: emailField });
     const result = await signIn(p.page, clock());
     expect(result).toMatchObject({ kind: 'needs-you', step: 'password' });
     expect(p.typed).toEqual([EMAIL]);
     expect(p.returns).toBe(1);
-    expect(p.steps).toEqual(['email']);
+    expect(p.steps).toEqual([]);
   });
 
-  it('Onshape asks for a code: stops at the last step, for the user', async () => {
+  it('Onshape asks for a code: handed over, every step of ours done', async () => {
     const p = fakePage({
       focus: emailField,
       onReturn: (n, p) => {
@@ -156,7 +157,7 @@ describe('the Sign in sequence', () => {
       },
     });
     const result = await signIn(p.page, clock());
-    expect(result).toMatchObject({ kind: 'needs-you', step: 'done' });
+    expect(result).toEqual({ kind: 'handed-over' });
     expect(p.steps).toEqual(['email', 'password']);
     expect(p.typed).toEqual([EMAIL, PASSWORD]);
   });
@@ -171,15 +172,113 @@ describe('the Sign in sequence', () => {
   });
 
   it('the password asked again after Return reads as the password step, not more', async () => {
+    const t = clock();
     const p = fakePage({
       focus: emailField,
       onReturn: (n, p) => {
         p.focus = passwordField; // Continue, then a wrong password cleared
       },
     });
-    const result = await signIn(p.page, clock());
-    expect(result).toMatchObject({ kind: 'needs-you', step: 'password' });
+    const result = await signIn(p.page, t);
+    expect(result).toEqual({
+      kind: 'needs-you',
+      step: 'password',
+      reason:
+        'Onshape asked for the password again. Check it, or change it in Zenshape → Saved Sign-in….',
+    });
     expect(p.typed).toEqual([EMAIL, PASSWORD]);
+    expect(t.now()).toBeGreaterThanOrEqual(t.settleMs);
+  });
+
+  // Seen on a fresh Windows install (bug-run-password-cleared): Onshape took
+  // the password and went to its code step, emptying the field on the way.
+  it('Onshape empties the password on its way to its code step: handed over, not the password', async () => {
+    const t = clock();
+    let secondReturnAt = -1;
+    const p = fakePage({
+      focus: emailField,
+      onReturn: (n, p) => {
+        if (n === 1) p.focus = passwordField;
+        if (n === 2) {
+          p.focus = passwordField;
+          secondReturnAt = t.now();
+        }
+      },
+    });
+    const readField = p.page.readField;
+    p.page.readField = () => {
+      if (secondReturnAt >= 0 && t.now() - secondReturnAt >= 450)
+        p.focus = { kind: 'other', empty: true }; // the code field
+      return readField();
+    };
+    const result = await signIn(p.page, t);
+    expect(result).toEqual({ kind: 'handed-over' });
+    expect(p.steps).toEqual(['email', 'password']);
+  });
+
+  for (const [between, what] of [
+    [null, 'no field'],
+    [{ kind: 'password', empty: false }, 'the password field with text'],
+  ] as const)
+    it(`a brief empty password read doesn’t stick: the count restarts after ${what}, then the page leaves`, async () => {
+      const t = clock();
+      let secondReturnAt = -1;
+      const p = fakePage({
+        focus: emailField,
+        onReturn: (n, p) => {
+          if (n === 1) p.focus = passwordField;
+          if (n === 2) secondReturnAt = t.now();
+        },
+      });
+      const readField = p.page.readField;
+      // Empty, then the read in between, then empty again for less than
+      // settleMs (from 300 ms); counted from the first empty read it would
+      // pass settleMs at 2100 ms.
+      p.page.readField = () => {
+        if (secondReturnAt >= 0) {
+          const since = t.now() - secondReturnAt;
+          if (since < 150) p.focus = passwordField;
+          else if (since < 300) p.focus = between;
+          else p.focus = passwordField;
+          if (since >= 2_200) p.on = false;
+        }
+        return readField();
+      };
+      const result = await signIn(p.page, t);
+      expect(result).toEqual({ kind: 'left', after: 'password' });
+    });
+
+  it('the email field empty after the password’s Return is a stop, never a hand-over', async () => {
+    const p = fakePage({
+      focus: emailField,
+      onReturn: (n, p) => {
+        p.focus = n === 1 ? passwordField : emailField; // back to the start
+      },
+    });
+    const result = await signIn(p.page, clock());
+    expect(result).toMatchObject({ kind: 'needs-you', step: 'done' });
+    expect(p.steps).toEqual(['email', 'password']);
+  });
+
+  it('a settle that starts near the timeout runs its full settleMs: the password step, not the last', async () => {
+    const t = clock();
+    let secondReturnAt = -1;
+    const p = fakePage({
+      focus: emailField,
+      onReturn: (n, p) => {
+        if (n === 1) p.focus = passwordField;
+        if (n === 2) secondReturnAt = t.now();
+      },
+    });
+    const readField = p.page.readField;
+    p.page.readField = () => {
+      if (secondReturnAt >= 0 && t.now() - secondReturnAt >= 9_000)
+        p.focus = passwordField; // emptied late, and it stays
+      return readField();
+    };
+    const result = await signIn(p.page, t);
+    expect(result).toMatchObject({ kind: 'needs-you', step: 'password' });
+    expect(t.now() - secondReturnAt).toBeGreaterThanOrEqual(9_000 + t.settleMs);
   });
 
   it('another fill in flight (busy) is "not yet": it waits and fills', async () => {

@@ -1,7 +1,7 @@
 {
   "name": "zenshape",
   "productName": "Zenshape",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "private": true,
   "description": "Onshape in a dedicated desktop window",
   "repository": {

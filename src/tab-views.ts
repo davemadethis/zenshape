@@ -10,8 +10,10 @@ import {
   type BaseWindowConstructorOptions,
   type BrowserWindowConstructorOptions,
   type IpcMainEvent,
+  type MenuItemConstructorOptions,
   type WebContents,
 } from 'electron';
+import { stripMenuTemplate, stripOwnItems } from './app-menu';
 import { randomUUID } from 'node:crypto';
 import type { CanSave, Field, SavedSignIn } from './saved-sign-in';
 import {
@@ -111,6 +113,8 @@ export interface ZenshapeWindowOptions {
   savedSignIn: SavedSignIn;
   // A short message for the user, shown by main.
   notify: (message: string) => void;
+  // The menu bar's menus, as of now; off macOS the Z's menu carries them.
+  appMenu: () => MenuItemConstructorOptions[];
 }
 
 // Our page renders one of: the tab strip, the split divider, or the drop
@@ -130,6 +134,14 @@ export function windowControls(
       height: STRIP_HEIGHT,
     },
   };
+}
+
+// The smoke test can't always read a native menu from outside (UI
+// Automation on Windows), so with ZENSHAPE_TRACE_MENUS=1 the Z's menu says
+// on stdout what it opened with and how long it stayed open.
+function traceMenu(message: string): void {
+  if (process.env.ZENSHAPE_TRACE_MENUS === '1')
+    console.log(`strip menu: ${message}`);
 }
 
 // Input events that aren't a press on the page: moves, wheels, and keys
@@ -299,6 +311,10 @@ export class ZenshapeWindow {
   private readonly zenSheets = new Map<WebContents, ZenSheets>();
   // Bumped on every toggle so a stale animation step stops early.
   private zenRun = 0;
+  // Electron destroys the window before 'closed', and its pages die a task
+  // later and keep sending events until then; the window itself can't be
+  // asked, and the strip outlives it, so teardown keeps its own state.
+  private closed = false;
 
   constructor(private readonly opts: ZenshapeWindowOptions) {
     this.collapsed = opts.collapsed;
@@ -666,7 +682,7 @@ export class ZenshapeWindow {
   // A view as short as the buttons can't see them grow (its report is
   // clipped), so anything that may change their height starts over.
   private readonly remeasureControls = (): void => {
-    if (this.hiddenControls === null || this.window.isDestroyed()) return;
+    if (this.hiddenControls === null || this.closed) return;
     this.hiddenControls = null;
     this.layout();
     this.push();
@@ -688,7 +704,7 @@ export class ZenshapeWindow {
   // moved, so the cursor is checked first; if it's still over the strip, keep
   // checking until it really leaves (there may be no second leave event).
   private unpeek(): void {
-    if (!this.peeked || this.menuOpen || this.window.isDestroyed()) return;
+    if (!this.peeked || this.menuOpen || this.closed) return;
     // An open rename keeps the strip down wherever the pointer is.
     if (this.cursorOverStrip() || this.renamingId) {
       clearTimeout(this.peekTimer);
@@ -702,17 +718,20 @@ export class ZenshapeWindow {
     clearTimeout(this.peekTimer);
     this.peekTimer = setTimeout(() => {
       this.peekClosing = false;
-      if (!this.window.isDestroyed()) this.layout();
+      if (!this.closed) this.layout();
     }, PEEK_OUT_MS);
   }
 
   // Native menus can make the strip think the pointer left; once one closes,
   // hide a peeked strip only if the pointer really is outside it.
-  private popup(menu: Menu): void {
+  private popup(menu: Menu, labels?: string[]): void {
     this.menuOpen = true;
+    const opened = Date.now();
+    if (labels) traceMenu(`opened: ${labels.join(' | ')}`);
     menu.popup({
       window: this.window,
       callback: () => {
+        if (labels) traceMenu(`closed after ${Date.now() - opened} ms`);
         this.menuOpen = false;
         if (this.peeked) this.unpeek();
       },
@@ -732,30 +751,14 @@ export class ZenshapeWindow {
 
   // Right-click on empty tab-bar space or on the Z.
   private showStripMenu(): void {
+    const template = stripMenuTemplate(
+      stripOwnItems(this),
+      this.opts.appMenu(),
+      process.platform,
+    );
     this.popup(
-      Menu.buildFromTemplate([
-        {
-          label: 'Hide Tab Bar',
-          type: 'checkbox',
-          checked: this.collapsed,
-          accelerator: 'Ctrl+Command+B',
-          click: () => this.setCollapsed(!this.collapsed),
-        },
-        { type: 'separator' },
-        {
-          label: 'Zen Mode',
-          type: 'checkbox',
-          checked: this.zen,
-          accelerator: 'Ctrl+Command+Z',
-          click: () => void this.setZen(!this.zen),
-        },
-        {
-          label: 'Hide Tab Bar in Zen Mode',
-          type: 'checkbox',
-          checked: this.hideStripInZen,
-          click: () => this.setHideStripInZen(!this.hideStripInZen),
-        },
-      ]),
+      Menu.buildFromTemplate(template),
+      template.map((m) => m.label ?? '-'),
     );
   }
 
@@ -987,11 +990,19 @@ export class ZenshapeWindow {
     const signedIn = !!tabId && this.signedInTab === tabId;
     signInLog('run end', {
       result: result.kind,
-      step: result.kind === 'left' ? result.after : result.step,
+      step:
+        result.kind === 'left'
+          ? result.after
+          : result.kind === 'handed-over'
+            ? 'done'
+            : result.step,
       signedIn,
       ms: Date.now() - started,
     });
-    if (result.kind === 'left' && signedIn) {
+    // Onshape took the password and asks for its own next step (a code): our
+    // steps are all done, so it ends as a success does and its page comes
+    // forward for the rest.
+    if ((result.kind === 'left' && signedIn) || result.kind === 'handed-over') {
       run.done.push('done');
       show();
       return this.endRun(SIGNED_IN_SHOWN_MS);
@@ -1403,6 +1414,9 @@ export class ZenshapeWindow {
   // close(), so a view still here was closed by its page: close its tab as
   // Close Tab does. Found by the view, since its contents is gone.
   private pageClosed(view: WebContentsView): void {
+    // The window's teardown isn't a page closing its own tab. dispose()
+    // empties `views` first; this holds if that order ever changes.
+    if (this.closed) return;
     const id = [...this.views].find(([, v]) => v === view)?.[0];
     if (id === undefined) return;
     this.views.delete(id);
@@ -1422,6 +1436,10 @@ export class ZenshapeWindow {
     };
 
     contents.on('will-navigate', (event) => {
+      if (this.closed) {
+        event.preventDefault();
+        return;
+      }
       if (!isOnshapeUrl(event.url)) {
         event.preventDefault();
         openExternal(event.url);
@@ -1436,6 +1454,7 @@ export class ZenshapeWindow {
     });
 
     contents.setWindowOpenHandler(({ url }) => {
+      if (this.closed) return { action: 'deny' };
       switch (decideWindowOpen(url)) {
         case 'app-window':
           return {
@@ -1531,6 +1550,7 @@ export class ZenshapeWindow {
   }
 
   private layout(): void {
+    if (this.closed) return;
     const { width, height } = this.window.getContentBounds();
     const area = this.pageArea();
     const active = this.list.activeId;
@@ -1562,7 +1582,7 @@ export class ZenshapeWindow {
   }
 
   private push(): void {
-    if (this.strip.webContents.isDestroyed()) return;
+    if (this.closed) return;
     // The overlay wears the gutter's color, which follows the page.
     if (this.overlayGutter && this.overlayGutter !== this.gutter())
       this.showWindowButtons(false);
@@ -1624,6 +1644,7 @@ export class ZenshapeWindow {
   }
 
   private changed(): void {
+    if (this.closed) return;
     this.watchSignInPage();
     this.layout();
     this.push();
@@ -1755,7 +1776,12 @@ export class ZenshapeWindow {
     this.changed();
   }
 
+  // Like Close Tab: first nothing can reach a page through the window, then
+  // the pages close.
   private dispose(): void {
+    this.closed = true;
+    const pages = [...this.views.values()];
+    this.views.clear();
     clearTimeout(this.endRunTimer);
     for (const timer of this.recheck.values()) clearTimeout(timer);
     this.unwatchSignInPage();
@@ -1763,13 +1789,12 @@ export class ZenshapeWindow {
     clearTimeout(this.splashTimer);
     ipcMain.off(STRIP_COMMAND_CHANNEL, this.onCommand);
     screen.off('display-metrics-changed', this.remeasureControls);
-    for (const view of this.views.values()) {
+    for (const view of pages) {
       if (!view.webContents.isDestroyed()) view.webContents.close();
     }
     if (!this.strip.webContents.isDestroyed()) this.strip.webContents.close();
     for (const view of [this.divider, this.overlay, this.splash]) {
       if (!view.webContents.isDestroyed()) view.webContents.close();
     }
-    this.views.clear();
   }
 }

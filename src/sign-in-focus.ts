@@ -22,9 +22,12 @@ export const ALLOWED_METHODS: ReadonlySet<string> = new Set([
 
 export function kindOf(attrs: Record<string, string>): FieldKind {
   const type = (attrs.type ?? 'text').toLowerCase();
-  if (type === 'password') return 'password';
-  if (type === 'email') return 'email';
   const hints = `${attrs.name ?? ''} ${attrs.id ?? ''} ${attrs.autocomplete ?? ''}`;
+  // Onshape's two-factor field is a password input (name=totpCode): a code
+  // field is never the saved password's.
+  if (type === 'password')
+    return /totp|one-time-code/i.test(hints) ? 'other' : 'password';
+  if (type === 'email') return 'email';
   if (type === 'text' && /email|user|login/i.test(hints)) return 'email';
   return 'other';
 }

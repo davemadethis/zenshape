@@ -24,12 +24,19 @@ export type SignInResult =
   // The page left Onshape's sign-in URL after the password's Return: signed
   // in, if it landed on Onshape (the caller checks).
   | { kind: 'left'; after: SignInStep }
+  // Onshape took the password and moved on to a step of its own (a code):
+  // every step of ours is done, and the rest is on Onshape's page.
+  | { kind: 'handed-over' }
   // Stopped at `step`; Onshape's page should come forward, the rest yours.
   | { kind: 'needs-you'; step: SignInStep; reason: string };
 
 export interface Timing {
   timeoutMs: number;
   pollMs: number;
+  // How long the password field must stay focused and empty after its Return
+  // before it counts as asked again: Onshape empties or hides it on its way
+  // to its next step (a code), and a read can land mid-change.
+  settleMs: number;
   now: () => number;
   sleep: (ms: number) => Promise<void>;
 }
@@ -37,6 +44,7 @@ export interface Timing {
 export const TIMING: Timing = {
   timeoutMs: 10_000,
   pollMs: 150,
+  settleMs: 2_000,
   now: () => Date.now(),
   sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
 };
@@ -50,11 +58,13 @@ type Wait = {
 };
 
 // Polls the focused field until `want` says yes or stop, the page leaves,
-// or the time runs out.
+// or the time runs out. `holdUntil` can push the timeout later, so a verdict
+// already under way isn't cut short by it.
 async function waitFor(
   page: SignInPage,
   t: Timing,
   want: (f: FocusedField | null) => boolean | 'stop',
+  holdUntil: () => number = () => -Infinity,
 ): Promise<Wait> {
   const start = t.now();
   let field: FocusedField | null = null;
@@ -69,7 +79,8 @@ async function waitFor(
     const verdict = want(field);
     if (verdict === 'stop') return { field, outcome: 'stop' };
     if (verdict) return { field, outcome: 'ok' };
-    if (t.now() - start >= t.timeoutMs) return { field, outcome: 'timeout' };
+    if (t.now() >= Math.max(start + t.timeoutMs, holdUntil()))
+      return { field, outcome: 'timeout' };
     await t.sleep(t.pollMs);
   }
 }
@@ -126,11 +137,13 @@ export async function signIn(
       emailFill.kind === 'skipped' ? emailFill.reason : 'Not typed.',
     );
   if (!(await page.pressReturn())) return { kind: 'left', after: 'save' };
-  page.stepDone('email');
 
   const password = await waitFor(page, t, (f) =>
     f?.kind === 'password' ? (f.empty ? true : 'stop') : false,
   );
+  // Ticked once Onshape has moved on, not when the Return goes out: a green
+  // tick means Onshape took it.
+  if (password.outcome !== 'timeout') page.stepDone('email');
   if (password.outcome === 'left') return { kind: 'left', after: 'email' };
   if (password.outcome === 'stop')
     return needs('password', 'Onshape’s password field already has text.');
@@ -148,10 +161,26 @@ export async function signIn(
     );
   if (!(await page.pressReturn())) return { kind: 'left', after: 'email' };
   page.stepDone('password');
-  // Signed in means leaving the sign-in page. Still here with an empty field
-  // focused, or still here at the timeout, is the user's: the password asked
-  // again at the password step, anything else (a code) at the last step.
-  const after = await waitFor(page, t, (f) => !!f?.empty);
+  // Signed in means leaving the sign-in page. An empty field of Onshape's
+  // own (a code) means it took the password: handed over. The password field
+  // empty again means it asked again; the email field means it went back to
+  // the start; the timeout is the user's to check.
+  // An empty password field is "not yet" until it has settled, since the
+  // page passes through one on its way to a code step.
+  let passwordEmptySince: number | null = null;
+  const after = await waitFor(
+    page,
+    t,
+    (f) => {
+      if (f?.kind !== 'password' || !f.empty) passwordEmptySince = null;
+      if (!f?.empty) return false;
+      if (f.kind !== 'password') return true;
+      passwordEmptySince ??= t.now();
+      return t.now() - passwordEmptySince >= t.settleMs;
+    },
+    () =>
+      passwordEmptySince === null ? -Infinity : passwordEmptySince + t.settleMs,
+  );
   if (after.outcome === 'left') return { kind: 'left', after: 'password' };
   if (after.outcome === 'timeout')
     return needs('done', 'Onshape didn’t finish signing in. Check its page.');
@@ -161,5 +190,11 @@ export async function signIn(
       'password',
       'Onshape asked for the password again. Check it, or change it in Zenshape → Saved Sign-in….',
     );
-  return needs('done', 'Onshape asks for more. Finish it on its page.');
+  // Shown as a success, so only for a field that is neither of ours: a
+  // reload to the start must never look signed in.
+  if (after.field?.kind === 'other') return { kind: 'handed-over' };
+  return needs(
+    'done',
+    'Onshape went back to its email field. Finish signing in on its page.',
+  );
 }

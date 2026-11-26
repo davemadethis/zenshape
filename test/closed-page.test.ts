@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { MenuItemConstructorOptions } from 'electron';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // A fake Electron in which, as in Electron 45, a view's `webContents` reads
 // undefined once its contents is destroyed, already inside 'destroyed'.
@@ -87,16 +88,26 @@ const h = vi.hoisted(() => {
     setVisible() {}
   }
 
+  // As in Electron 45, the window is destroyed before 'closed' fires: from
+  // then on its methods throw, while its pages are destroyed only later.
   class FakeBaseWindow {
     listeners: Record<string, Listener[]> = {};
     children: FakeView[] = [];
     closed = false;
-    contentView = {
+    private readonly view = {
       addChildView: (v: FakeView) => this.children.push(v),
       removeChildView: (v: FakeView) => {
         this.children = this.children.filter((c) => c !== v);
       },
     };
+    get contentView() {
+      return this.alive(this.view);
+    }
+    private alive<T>(value: T): T {
+      if (this.closed) throw new TypeError('Object has been destroyed');
+      return value;
+    }
+    isDestroyed = () => this.closed;
     on(event: string, fn: Listener) {
       (this.listeners[event] ??= []).push(fn);
     }
@@ -108,23 +119,46 @@ const h = vi.hoisted(() => {
     maximize() {}
     setWindowButtonVisibility() {}
     setTitleBarOverlay() {}
-    getContentBounds = () => ({ x: 0, y: 0, width: 1200, height: 800 });
-    isFullScreen = () => false;
-    isMinimized = () => false;
+    getContentBounds = () =>
+      this.alive({ x: 0, y: 0, width: 1200, height: 800 });
+    isFullScreen = () => this.alive(false);
+    isMinimized = () => this.alive(false);
   }
 
-  return { FakeContents, FakeView, FakeBaseWindow };
+  const openExternal = vi.fn();
+  // What the strip's menus popped up, newest last.
+  const popups: Array<{ template: unknown[]; callback?: () => void }> = [];
+  const ipc: Listener[] = [];
+  return {
+    FakeContents,
+    FakeView,
+    FakeBaseWindow,
+    openExternal,
+    popups,
+    ipc,
+  };
 });
 
 vi.mock('electron', () => ({
   app: { getVersion: () => '0.0.0' },
   BaseWindow: h.FakeBaseWindow,
   WebContentsView: h.FakeView,
-  Menu: { buildFromTemplate: () => ({ popup: () => {} }) },
+  Menu: {
+    buildFromTemplate: (template: unknown[]) => ({
+      popup: (o: { callback?: () => void }) =>
+        h.popups.push({ template, callback: o.callback }),
+    }),
+  },
   clipboard: { writeText: () => {} },
-  ipcMain: { on: () => {}, off: () => {} },
+  ipcMain: {
+    on: (_channel: string, fn: (...args: unknown[]) => void) => h.ipc.push(fn),
+    off: (_channel: string, fn: (...args: unknown[]) => void) => {
+      const i = h.ipc.indexOf(fn);
+      if (i >= 0) h.ipc.splice(i, 1);
+    },
+  },
   screen: { on: () => {}, off: () => {}, getCursorScreenPoint: () => ({}) },
-  shell: { openExternal: () => {} },
+  shell: { openExternal: h.openExternal },
 }));
 
 import { ZenshapeWindow } from '../src/tab-views';
@@ -138,7 +172,12 @@ const URL_A = 'https://cad.onshape.com/documents/a';
 const URL_B = 'https://cad.onshape.com/documents/b';
 const URL_C = 'https://cad.onshape.com/documents/c';
 
-function open(urls: string[]) {
+const APP_MENU: MenuItemConstructorOptions[] = [
+  { label: 'Zenshape', submenu: [{ role: 'quit' }] },
+];
+
+function open(urls: string[], { collapsed = false } = {}) {
+  let stripView: unknown;
   const win = new ZenshapeWindow({
     bounds: { width: 1200, height: 800 },
     maximized: false,
@@ -146,11 +185,13 @@ function open(urls: string[]) {
       tabs: urls.map((url) => ({ url, title: url, pinned: false })),
       activeIndex: 0,
     },
-    collapsed: false,
+    collapsed,
     zen: false,
     hideStripInZen: false,
     preload: '/preload.cjs',
-    loadStrip: () => {},
+    loadStrip: (contents, mode) => {
+      if (mode === 'strip') stripView = contents;
+    },
     onChange: () => {},
     savedSignIn: new SavedSignIn('/nonexistent/saved-sign-in.json', {
       isAsyncEncryptionAvailable: () => Promise.resolve(false),
@@ -158,6 +199,7 @@ function open(urls: string[]) {
       decryptStringAsync: () => Promise.reject(new Error('unused')),
     }),
     notify: () => {},
+    appMenu: () => APP_MENU,
   });
   const base = win.window as unknown as Win;
   // Our own views (strip, divider, overlay, splash) never get Onshape's
@@ -176,7 +218,9 @@ function open(urls: string[]) {
       split: unknown;
     };
   const idOf = (url: string) => state().tabs.find((t) => t.title === url)!.id;
-  return { win, base, page, state, idOf };
+  // As the strip's own page sends it.
+  const command = (cmd: unknown) => h.ipc.at(-1)!({ sender: stripView }, cmd);
+  return { win, base, page, strip, state, idOf, command };
 }
 
 // An Onshape page opens about:blank (adopted as a tab beside it).
@@ -314,5 +358,150 @@ describe('a page closing its own tab', () => {
     expect(sheets.has(a)).toBe(true);
     a.destroy();
     expect(sheets.has(a)).toBe(false);
+  });
+});
+
+describe('closing the window', () => {
+  // The window is gone before 'closed'; its pages die a task later and keep
+  // loading until then (seen in Electron 45 with a busy page).
+  for (const event of ['did-start-loading', 'did-stop-loading']) {
+    it(`a page's ${event} after the window closed throws nothing and pushes nothing`, () => {
+      const { base, page, strip } = open([URL_A, URL_B]);
+      const a = page(URL_A);
+      base.close();
+      const pushes = strip.send.mock.calls.length;
+      expect(a.destroyed).toBe(false);
+      expect(() => a.emit(event)).not.toThrow();
+      expect(strip.send.mock.calls.length).toBe(pushes);
+    });
+  }
+
+  it("a page's navigation off Onshape after the window closed is stopped, and opens nothing", () => {
+    const { base, page } = open([URL_A]);
+    const a = page(URL_A);
+    base.close();
+    h.openExternal.mockClear();
+    const event = { url: 'https://example.com/', preventDefault: vi.fn() };
+    a.emit('will-navigate', event);
+    expect(event.preventDefault).toHaveBeenCalled();
+    expect(h.openExternal).not.toHaveBeenCalled();
+  });
+
+  // Electron destroys a contents a task after close(); were it ever at once,
+  // 'destroyed' would run inside dispose(), on the dead window.
+  it('a page destroyed inside the teardown is not treated as closing its own tab', async () => {
+    const { win, base, page, idOf } = open([URL_A, URL_B]);
+    win.selectTab(idOf(URL_B));
+    const a = page(URL_A);
+    const b = page(URL_B);
+    a.close = () => {
+      a.closes++;
+      a.destroy();
+    };
+    const before = win.snapshot();
+    expect(() => base.close()).not.toThrow();
+    await flush();
+    expect([a.closes, b.closes]).toEqual([1, 1]);
+    expect([a.destroyed, b.destroyed]).toEqual([true, true]);
+    expect(win.snapshot()).toEqual(before);
+  });
+
+  it("a page's window.open after the window closed opens no tab", () => {
+    const { base, page } = open([URL_A]);
+    const a = page(URL_A);
+    base.close();
+    expect(a.openHandler!({ url: 'about:blank' }).action).toBe('deny');
+  });
+
+  it('the pages are closed once each, and the saved tabs stay as they were', async () => {
+    const { win, base, page, idOf } = open([URL_A, URL_B]);
+    win.selectTab(idOf(URL_B));
+    const a = page(URL_A);
+    const b = page(URL_B);
+    const before = win.snapshot();
+    base.close();
+    await flush();
+    expect([a.closes, b.closes]).toEqual([1, 1]);
+    expect([a.destroyed, b.destroyed]).toEqual([true, true]);
+    expect(win.snapshot()).toEqual(before);
+  });
+});
+
+describe("the strip's menu", () => {
+  const platform = process.platform;
+  const onPlatform = (p: NodeJS.Platform) =>
+    Object.defineProperty(process, 'platform', { value: p });
+  afterEach(() => onPlatform(platform));
+  const labels = (t: unknown[]) =>
+    (t as Array<{ label?: string; type?: string }>).map(
+      (m) => m.label ?? m.type,
+    );
+
+  it('off macOS ends with the app menu', () => {
+    onPlatform('win32');
+    const { command } = open([URL_A]);
+    command({ type: 'strip-menu' });
+    expect(labels(h.popups.at(-1)!.template)).toEqual([
+      'Hide Tab Bar',
+      'separator',
+      'Zen Mode',
+      'Hide Tab Bar in Zen Mode',
+      'separator',
+      'Zenshape',
+    ]);
+  });
+
+  it('on macOS is its three items', () => {
+    onPlatform('darwin');
+    const { command } = open([URL_A]);
+    command({ type: 'strip-menu' });
+    expect(labels(h.popups.at(-1)!.template)).toEqual([
+      'Hide Tab Bar',
+      'separator',
+      'Zen Mode',
+      'Hide Tab Bar in Zen Mode',
+    ]);
+  });
+
+  it('with ZENSHAPE_TRACE_MENUS=1 says what it opened with and when it closed', () => {
+    onPlatform('win32');
+    vi.stubEnv('ZENSHAPE_TRACE_MENUS', '1');
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      const { command } = open([URL_A]);
+      command({ type: 'strip-menu' });
+      h.popups.at(-1)!.callback!();
+      expect(log.mock.calls.map((c) => c[0])).toEqual([
+        'strip menu: opened: Hide Tab Bar | - | Zen Mode | Hide Tab Bar in Zen Mode | - | Zenshape',
+        expect.stringMatching(/^strip menu: closed after \d+ ms$/),
+      ]);
+    } finally {
+      log.mockRestore();
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('says nothing without it', () => {
+    onPlatform('win32');
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      const { command } = open([URL_A]);
+      command({ type: 'strip-menu' });
+      h.popups.at(-1)!.callback!();
+      expect(log).not.toHaveBeenCalled();
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  // Quit from the menu closes the window before the menu's callback runs.
+  it('its callback after the window closed throws nothing, with the strip peeked', () => {
+    onPlatform('win32');
+    const { base, command } = open([URL_A], { collapsed: true });
+    command({ type: 'peek' });
+    command({ type: 'strip-menu' });
+    const { callback } = h.popups.at(-1)!;
+    base.close();
+    expect(() => callback!()).not.toThrow();
   });
 });

@@ -6,13 +6,13 @@ import {
   screen,
   session,
   shell,
-  type MenuItemConstructorOptions,
   type Session,
   type WebContents,
 } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
 import started from 'electron-squirrel-startup';
+import { appMenuTemplate, type AppMenuContext } from './app-menu';
 import { loadAppState, saveAppState, type AppState } from './app-state';
 import { persistentCopy } from './cookies';
 import { cleanUserAgent } from './navigation';
@@ -95,6 +95,7 @@ function createWindow(): ZenshapeWindow {
       persistSoon();
       buildMenu();
     },
+    appMenu: () => appMenuTemplate(menuContext()),
   });
 
   win.window.on('close', () => {
@@ -123,164 +124,41 @@ function focusApp(): void {
   else current = createWindow();
 }
 
-function buildMenu(): void {
-  const available = update;
-  const withWindow = (fn: (w: ZenshapeWindow) => void) => () => {
-    if (current) fn(current);
+function menuContext(): AppMenuContext {
+  return {
+    appName: app.name,
+    window: () => current,
+    showSplash: (mode) => {
+      current ??= createWindow();
+      current.showSplash(mode);
+    },
+    newTab: () => (current ? current.newTab() : focusApp()),
+    update,
+    openUpdate: (url) => void shell.openExternal(url),
+    signInSaved: !!savedSignIn?.exists,
+    forgetSignIn: () => {
+      savedSignIn?.forget();
+      buildMenu();
+    },
+    restoreAllTabs: appState.restoreAllTabs,
+    setRestoreAllTabs: (on) => {
+      appState.restoreAllTabs = on;
+      persist();
+    },
+    saved: {
+      zen: appState.zen,
+      hideStripInZen: appState.hideStripInZen,
+      stripCollapsed: appState.stripCollapsed,
+    },
   };
-  const tabNumbers: MenuItemConstructorOptions[] = [
-    1, 2, 3, 4, 5, 6, 7, 8, 9,
-  ].map((n) => ({
-    label: n === 9 ? 'Last Tab' : `Tab ${n}`,
-    accelerator: `CmdOrCtrl+${n}`,
-    click: withWindow((w) => w.selectNumber(n)),
-  }));
+}
 
-  const template: MenuItemConstructorOptions[] = [
-    {
-      label: app.name,
-      submenu: [
-        // Our own view, not the native panel: Windows has none, and this
-        // carries the disclaimer with the logo on every OS.
-        {
-          label: `About ${app.name}`,
-          // Works with no window open too (macOS keeps running without one).
-          click: () => {
-            current ??= createWindow();
-            current.showSplash('about');
-          },
-        },
-        ...(available
-          ? [
-              {
-                label: `Update Available (${available.version})…`,
-                click: () => void shell.openExternal(available.url),
-              },
-            ]
-          : []),
-        { type: 'separator' },
-        {
-          label: 'Saved Sign-in…',
-          click: () => {
-            current ??= createWindow();
-            current.showSplash('saved-sign-in');
-          },
-        },
-        {
-          label: 'Forget Saved Sign-in',
-          enabled: !!savedSignIn?.exists,
-          click: () => {
-            savedSignIn?.forget();
-            buildMenu();
-          },
-        },
-        { type: 'separator' },
-        {
-          label: 'Restore All Tabs on Launch',
-          type: 'checkbox',
-          checked: appState.restoreAllTabs,
-          click: (item) => {
-            appState.restoreAllTabs = item.checked;
-            persist();
-          },
-        },
-        { type: 'separator' },
-        { role: 'services' },
-        { type: 'separator' },
-        { role: 'hide' },
-        { role: 'hideOthers' },
-        { role: 'unhide' },
-        { type: 'separator' },
-        { role: 'quit' },
-      ],
-    },
-    {
-      label: 'File',
-      submenu: [
-        {
-          label: 'New Tab',
-          accelerator: 'CmdOrCtrl+T',
-          click: () => (current ? current.newTab() : focusApp()),
-        },
-        {
-          label: 'Close Tab',
-          accelerator: 'CmdOrCtrl+W',
-          click: withWindow((w) => w.closeTab()),
-        },
-      ],
-    },
-    { role: 'editMenu' },
-    {
-      label: 'View',
-      submenu: [
-        {
-          label: 'Zen Mode',
-          type: 'checkbox',
-          checked: current?.isZen ?? appState.zen,
-          accelerator: 'Ctrl+Command+Z',
-          click: withWindow((w) => void w.setZen(!w.isZen)),
-        },
-        {
-          label: 'Hide Tab Bar in Zen Mode',
-          type: 'checkbox',
-          checked: current?.hidesStripInZen ?? appState.hideStripInZen,
-          click: withWindow((w) => w.setHideStripInZen(!w.hidesStripInZen)),
-        },
-        {
-          label: 'Hide Tab Bar',
-          type: 'checkbox',
-          checked: current?.isCollapsed ?? appState.stripCollapsed,
-          accelerator: 'Ctrl+Command+B',
-          click: withWindow((w) => w.setCollapsed(!w.isCollapsed)),
-        },
-        { type: 'separator' },
-        {
-          label: 'Reload',
-          accelerator: 'CmdOrCtrl+R',
-          click: withWindow((w) => w.activeContents?.reload()),
-        },
-        {
-          label: 'Back',
-          accelerator: 'CmdOrCtrl+[',
-          click: withWindow((w) => w.goBack()),
-        },
-        {
-          label: 'Forward',
-          accelerator: 'CmdOrCtrl+]',
-          click: withWindow((w) => w.goForward()),
-        },
-        { type: 'separator' },
-        {
-          label: 'Developer Tools',
-          accelerator: 'Alt+CmdOrCtrl+I',
-          click: withWindow((w) => w.activeContents?.toggleDevTools()),
-        },
-        { type: 'separator' },
-        { role: 'togglefullscreen' },
-      ],
-    },
-    {
-      label: 'Window',
-      submenu: [
-        { role: 'minimize' },
-        { role: 'zoom' },
-        { type: 'separator' },
-        {
-          label: 'Next Tab',
-          accelerator: 'Ctrl+Tab',
-          click: withWindow((w) => w.cycleTab(1)),
-        },
-        {
-          label: 'Previous Tab',
-          accelerator: 'Ctrl+Shift+Tab',
-          click: withWindow((w) => w.cycleTab(-1)),
-        },
-        { type: 'separator' },
-        ...tabNumbers,
-      ],
-    },
-  ];
-  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+// Set on every OS: off macOS no menu bar is drawn, but the application menu
+// is what makes its accelerators (Ctrl+T and the rest) work.
+function buildMenu(): void {
+  Menu.setApplicationMenu(
+    Menu.buildFromTemplate(appMenuTemplate(menuContext())),
+  );
 }
 
 function uniquePath(dir: string, filename: string): string {

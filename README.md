@@ -49,7 +49,7 @@ After that:
 | Hide the tab bar | ⌃⌘B; move the mouse to the top edge to show it again |
 | Switch tabs | ⌘1 to ⌘8, ⌘9 for the last tab, ⌃Tab and ⌃⇧Tab |
 
-Shortcuts are shown for macOS. On Windows and Linux, use Ctrl in place of ⌘. The ⌃⌘ shortcuts are macOS-only, so on other systems use the **Z** button or the **View** menu.
+Shortcuts are shown for macOS. On Windows and Linux, use Ctrl in place of ⌘. The ⌃⌘ shortcuts are macOS-only, so on other systems use the **Z** button. Windows and Linux have no menu bar: right-click the **Z** for the app menu (About, Saved Sign-in…, View, Window and the rest).
 
 - **Zen mode on a document** hides Onshape's top bar, and slides the left-hand rail and the tab list along the bottom out of the way, so the model takes the whole window.
 - **Zen mode on the documents list** keeps Onshape's top bar, footer, billing banner and plan buttons, and slides away the sidebar and side panels.

@@ -411,7 +411,8 @@ body.splash {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--bar);
+  /* WORKAROUND: Windows Chromium hides a fully covered page and drops its keys; 99% keeps Onshape's visible. */
+  background: color-mix(in srgb, var(--bar) 99%, transparent);
   color: var(--text);
   opacity: 0;
   transition: opacity 300ms ease;

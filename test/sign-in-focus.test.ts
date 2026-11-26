@@ -70,6 +70,33 @@ describe('which field has focus', () => {
     expect(kindOf({ type: 'email' })).toBe('email');
   });
 
+  // Onshape's two-factor step (seen on Windows, 2026-11-25): a password
+  // input named totpCode. Read as the password, the run took it for a wrong
+  // password, and the autofill could type the password into it.
+  it('a code field shaped as a password input is not the password', () => {
+    expect(kindOf({ type: 'password', name: 'totpCode' })).toBe('other');
+    expect(kindOf({ type: 'password', autocomplete: 'one-time-code' })).toBe(
+      'other',
+    );
+    expect(kindOf({ type: 'password', name: 'password' })).toBe('password');
+    expect(
+      kindOf({
+        type: 'password',
+        name: 'password',
+        autocomplete: 'current-password',
+      }),
+    ).toBe('password');
+  });
+
+  // Onshape's own password field's attributes aren't recorded, so this holds
+  // the broader point: a password input whose name merely contains "code" or
+  // "otp" is still the password, or the run would never fill it and go red.
+  it('a password named like a passcode is still the password', () => {
+    expect(kindOf({ type: 'password', name: 'passcode' })).toBe('password');
+    expect(kindOf({ type: 'password', id: 'loginPasscode' })).toBe('password');
+    expect(kindOf({ type: 'password', name: 'otpassword' })).toBe('password');
+  });
+
   it('never uses Runtime, or anything outside its list', async () => {
     const calls: string[] = [];
     await readFocusedField(page({ attrs: ONSHAPE_EMAIL, value: '' }, calls));
